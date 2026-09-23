@@ -8,7 +8,7 @@ import {
   categoryPath,
   flavorPath,
   mixPath
-} from '~/utils/seo'
+} from '#shared/utils/seo'
 
 type Brand = { id?: number; name: string; origin_country: string | null }
 type Flavor = {
@@ -97,8 +97,8 @@ useSeoMeta({
   twitterImage: absoluteUrl(siteUrl, '/logo.svg')
 })
 
-useHead(() => ({
-  link: [{ rel: 'canonical', href: canonical }],
+useHead({ link: [{ rel: 'canonical', href: canonical }] })
+useHeadSafe(() => ({
   script: [{
     type: 'application/ld+json',
     textContent: JSON.stringify({

@@ -14,7 +14,8 @@ const { data } = await useAsyncData('brand-' + id, async () => {
     $supabase.from('shisha_brands').select('id,name,origin_country,website_url').eq('id', id).maybeSingle(),
     $supabase.from('shisha_flavors').select('id,name,flavor_profile,category,japan_availability_status').eq('brand_id', id).order('name')
   ])
-  if (brandResult.error) throw createError({ statusCode: 502, statusMessage: brandResult.error.message })
+  const fetchError = brandResult.error || flavorsResult.error
+  if (fetchError) throw createError({ statusCode: 502, statusMessage: fetchError.message })
   return { brand: brandResult.data, flavors: flavorsResult.data || [] }
 })
 

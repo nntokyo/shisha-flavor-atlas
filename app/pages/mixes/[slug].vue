@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { absoluteUrl, compactDescription, flavorPath, idFromSlug, mixPath } from '~/utils/seo'
+import { absoluteUrl, compactDescription, flavorPath, idFromSlug, mixPath } from '#shared/utils/seo'
 
 const route = useRoute()
 const config = useRuntimeConfig()
@@ -40,8 +40,8 @@ useSeoMeta({
   twitterTitle: mix.title,
   twitterDescription: description
 })
-useHead({
-  link: [{ rel: 'canonical', href: canonical }],
+useHead({ link: [{ rel: 'canonical', href: canonical }] })
+useHeadSafe({
   script: [{
     type: 'application/ld+json',
     textContent: JSON.stringify({

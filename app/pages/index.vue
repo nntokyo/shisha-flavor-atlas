@@ -101,7 +101,7 @@ useSeoMeta({
 useHead({
   link: [
     { rel: 'canonical', href: canonical },
-    { rel: 'preload', as: 'image', href: '/hero-image.png' }
+    { rel: 'preload', as: 'image', href: '/hero-image.webp', type: 'image/webp' }
   ]
 })
 useHeadSafe(() => ({

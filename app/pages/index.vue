@@ -49,6 +49,7 @@ const { $supabase } = useNuxtApp() as unknown as { $supabase: SupabaseClient }
 const config = useRuntimeConfig()
 const siteUrl = String(config.public.siteUrl || 'https://shisha-flavor-atlas.vercel.app')
 const canonical = absoluteUrl(siteUrl, '/')
+const heroImage = absoluteUrl(siteUrl, '/hero-image.png')
 
 const { data, pending } = await useAsyncData('home-data', async () => {
   const [flavorResult, recipeResult] = await Promise.all([
@@ -90,14 +91,19 @@ useSeoMeta({
   ogDescription: DEFAULT_DESCRIPTION,
   ogType: 'website',
   ogUrl: canonical,
-  ogImage: absoluteUrl(siteUrl, '/logo.svg'),
-  twitterCard: 'summary',
+  ogImage: heroImage,
+  twitterCard: 'summary_large_image',
   twitterTitle: 'Shisha Flavor Atlas',
   twitterDescription: DEFAULT_DESCRIPTION,
-  twitterImage: absoluteUrl(siteUrl, '/logo.svg')
+  twitterImage: heroImage
 })
 
-useHead({ link: [{ rel: 'canonical', href: canonical }] })
+useHead({
+  link: [
+    { rel: 'canonical', href: canonical },
+    { rel: 'preload', as: 'image', href: '/hero-image.png' }
+  ]
+})
 useHeadSafe(() => ({
   script: [{
     type: 'application/ld+json',
@@ -261,10 +267,12 @@ function amountLabel(recipe: Recipe, item: RecipeItem) {
       </div>
     </header>
 
-    <section class="hero">
-      <p class="eyebrow">FACT-BASED SHISHA DATABASE</p>
-      <h1>世界のフレーバーとMIXを、ひとつの場所に。</h1>
-      <p class="lead">フレーバー情報に加えて、%またはグラム配合・温度指定つきのMIXレシピを登録できます。</p>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="heroContent">
+        <p class="eyebrow">FACT-BASED SHISHA DATABASE</p>
+        <h1 id="hero-title">世界のフレーバーとMIXを、ひとつの場所に。</h1>
+        <p class="lead">フレーバー情報に加えて、%またはグラム配合・温度指定つきのMIXレシピを登録できます。</p>
+      </div>
     </section>
 
     <nav class="tabs">

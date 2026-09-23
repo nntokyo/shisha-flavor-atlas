@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  SITE_NAME,
+  DEFAULT_DESCRIPTION,
+  absoluteUrl,
+  brandPath,
+  categoryPath,
+  flavorPath,
+  mixPath
+} from '#shared/utils/seo'
 
-type Brand = { name: string; origin_country: string | null }
+type Brand = { id?: number; name: string; origin_country: string | null }
 type Flavor = {
   id: number
   name: string
@@ -37,15 +46,85 @@ type Recipe = {
 }
 
 const { $supabase } = useNuxtApp() as unknown as { $supabase: SupabaseClient }
-const flavors = ref<Flavor[]>([])
-const recipes = ref<Recipe[]>([])
-const loading = ref(true)
-const errorMessage = ref('')
+const config = useRuntimeConfig()
+const siteUrl = String(config.public.siteUrl || 'https://shisha-flavor-atlas.vercel.app')
+const canonical = absoluteUrl(siteUrl, '/')
+
+const { data, pending } = await useAsyncData('home-data', async () => {
+  const [flavorResult, recipeResult] = await Promise.all([
+    $supabase
+      .from('shisha_flavors')
+      .select('id,name,flavor_profile,category,tobacco_leaf,series,source_url,japan_source_url,japan_availability_status,shisha_brands(id,name,origin_country)')
+      .order('name')
+      .limit(1000),
+    $supabase
+      .from('mix_recipes')
+      .select('id,title,description,author_name,difficulty,tags,is_recommended,recommendation_note,measurement_mode,target_temperature_c,heat_notes,total_grams,mix_recipe_items(percentage,grams,position,shisha_flavors(id,name,flavor_profile,category,tobacco_leaf,series,source_url,japan_source_url,japan_availability_status,shisha_brands(id,name,origin_country)))')
+      .eq('status', 'published')
+      .order('is_recommended', { ascending: false })
+      .order('created_at', { ascending: false })
+  ])
+
+  return {
+    flavors: (flavorResult.data || []) as unknown as Flavor[],
+    recipes: (recipeResult.data || []) as unknown as Recipe[],
+    error: flavorResult.error?.message || recipeResult.error?.message || ''
+  }
+}, {
+  default: () => ({ flavors: [] as Flavor[], recipes: [] as Recipe[], error: '' })
+})
+
+const flavors = computed(() => data.value?.flavors || [])
+const recipes = computed(() => data.value?.recipes || [])
+const errorMessage = computed(() => data.value?.error || '')
 const activeTab = ref<'flavors' | 'mix'>('flavors')
 const keyword = ref('')
 const category = ref('')
 const japanOnly = ref(false)
 const submitMessage = ref('')
+
+useSeoMeta({
+  title: 'Shisha Flavor Atlas | 世界のシーシャフレーバー・MIXデータベース',
+  description: DEFAULT_DESCRIPTION,
+  ogTitle: 'Shisha Flavor Atlas',
+  ogDescription: DEFAULT_DESCRIPTION,
+  ogType: 'website',
+  ogUrl: canonical,
+  ogImage: absoluteUrl(siteUrl, '/logo.svg'),
+  twitterCard: 'summary',
+  twitterTitle: 'Shisha Flavor Atlas',
+  twitterDescription: DEFAULT_DESCRIPTION,
+  twitterImage: absoluteUrl(siteUrl, '/logo.svg')
+})
+
+useHead({ link: [{ rel: 'canonical', href: canonical }] })
+useHeadSafe(() => ({
+  script: [{
+    type: 'application/ld+json',
+    textContent: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'WebSite',
+          name: SITE_NAME,
+          url: canonical,
+          description: DEFAULT_DESCRIPTION,
+          inLanguage: 'ja'
+        },
+        {
+          '@type': 'ItemList',
+          name: 'シーシャフレーバー',
+          itemListElement: flavors.value.slice(0, 100).map((flavor, index) => ({
+            '@type': 'ListItem',
+            position: index + 1,
+            name: flavor.name,
+            url: absoluteUrl(siteUrl, flavorPath(flavor.name, flavor.id))
+          }))
+        }
+      ]
+    })
+  }]
+}))
 
 const draft = reactive({
   title: '',
@@ -60,33 +139,6 @@ const draft = reactive({
     { flavor_id: '', amount: 50 }
   ]
 })
-
-onMounted(loadData)
-
-async function loadData() {
-  loading.value = true
-  errorMessage.value = ''
-  const [flavorResult, recipeResult] = await Promise.all([
-    $supabase
-      .from('shisha_flavors')
-      .select('id,name,flavor_profile,category,tobacco_leaf,series,source_url,japan_source_url,japan_availability_status,shisha_brands(name,origin_country)')
-      .order('name')
-      .limit(1000),
-    $supabase
-      .from('mix_recipes')
-      .select('id,title,description,author_name,difficulty,tags,is_recommended,recommendation_note,measurement_mode,target_temperature_c,heat_notes,total_grams,mix_recipe_items(percentage,grams,position,shisha_flavors(id,name,flavor_profile,category,tobacco_leaf,series,source_url,japan_source_url,japan_availability_status,shisha_brands(name,origin_country)))')
-      .eq('status', 'published')
-      .order('is_recommended', { ascending: false })
-      .order('created_at', { ascending: false })
-  ])
-
-  if (flavorResult.error || recipeResult.error) {
-    errorMessage.value = flavorResult.error?.message || recipeResult.error?.message || ''
-  }
-  flavors.value = (flavorResult.data || []) as unknown as Flavor[]
-  recipes.value = (recipeResult.data || []) as unknown as Recipe[]
-  loading.value = false
-}
 
 const categories = computed(() =>
   [...new Set(flavors.value.map((flavor) => flavor.category).filter(Boolean) as string[])].sort()
@@ -220,7 +272,7 @@ function amountLabel(recipe: Recipe, item: RecipeItem) {
       <button :class="{ active: activeTab === 'mix' }" @click="activeTab = 'mix'">MIXレシピ</button>
     </nav>
 
-    <p v-if="loading" class="state">Supabaseから読み込み中...</p>
+    <p v-if="pending" class="state">Supabaseから読み込み中...</p>
     <p v-else-if="errorMessage" class="state error">{{ errorMessage }}</p>
 
     <template v-else-if="activeTab === 'flavors'">
@@ -241,13 +293,31 @@ function amountLabel(recipe: Recipe, item: RecipeItem) {
       <section class="grid">
         <article v-for="flavor in filteredFlavors" :key="flavor.id" class="card">
           <div class="topline">
-            <span class="brand">{{ flavor.shisha_brands?.name }}</span>
+            <NuxtLink
+              v-if="flavor.shisha_brands?.id"
+              class="brand seo-link"
+              :to="brandPath(flavor.shisha_brands.name, flavor.shisha_brands.id)"
+            >
+              {{ flavor.shisha_brands.name }}
+            </NuxtLink>
+            <span v-else class="brand">{{ flavor.shisha_brands?.name }}</span>
             <span v-if="flavor.japan_availability_status === 'verified'" class="pill">国内流通確認済み</span>
           </div>
-          <h2>{{ flavor.name }}</h2>
+
+          <h2>
+            <NuxtLink class="seo-link" :to="flavorPath(flavor.name, flavor.id)">{{ flavor.name }}</NuxtLink>
+          </h2>
           <p class="profile">{{ flavor.flavor_profile }}</p>
           <dl>
-            <div><dt>カテゴリ</dt><dd>{{ flavor.category || '—' }}</dd></div>
+            <div>
+              <dt>カテゴリ</dt>
+              <dd>
+                <NuxtLink v-if="flavor.category" class="seo-link" :to="categoryPath(flavor.category)">
+                  {{ flavor.category }}
+                </NuxtLink>
+                <template v-else>—</template>
+              </dd>
+            </div>
             <div><dt>葉</dt><dd>{{ flavor.tobacco_leaf || '—' }}</dd></div>
             <div><dt>シリーズ</dt><dd>{{ flavor.series || '—' }}</dd></div>
             <div><dt>原産国</dt><dd>{{ flavor.shisha_brands?.origin_country || '—' }}</dd></div>
@@ -276,7 +346,9 @@ function amountLabel(recipe: Recipe, item: RecipeItem) {
               <span class="pill gold">おすすめ</span>
               <span class="difficulty">{{ difficultyLabel(recipe.difficulty) }}</span>
             </div>
-            <h3>{{ recipe.title }}</h3>
+            <h3>
+              <NuxtLink class="seo-link" :to="mixPath(recipe.title, recipe.id)">{{ recipe.title }}</NuxtLink>
+            </h3>
             <p>{{ recipe.description }}</p>
             <div class="recipeMeta">
               <span>{{ recipe.measurement_mode === 'grams' ? 'グラム配合' : '%配合' }}</span>
@@ -295,6 +367,12 @@ function amountLabel(recipe: Recipe, item: RecipeItem) {
                 </div>
                 <b>{{ amountLabel(recipe, item) }}</b>
                 <div class="miniLinks">
+                  <NuxtLink
+                    v-if="item.shisha_flavors"
+                    :to="flavorPath(item.shisha_flavors.name, item.shisha_flavors.id)"
+                  >
+                    詳細
+                  </NuxtLink>
                   <a :href="item.shisha_flavors?.source_url" target="_blank" rel="noopener noreferrer">公式情報</a>
                   <a v-if="item.shisha_flavors?.japan_source_url" :href="item.shisha_flavors.japan_source_url" target="_blank" rel="noopener noreferrer">国内取扱情報</a>
                 </div>

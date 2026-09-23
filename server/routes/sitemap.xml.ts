@@ -1,13 +1,5 @@
+import { brandPath, categoryPath, flavorPath, mixPath } from '#shared/utils/seo'
 import { getServerSupabase } from '../utils/supabase'
-
-function slugify(value: string) {
-  return value
-    .normalize('NFKC')
-    .toLowerCase()
-    .trim()
-    .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
-    .replace(/^-+|-+$/g, '') || 'item'
-}
 
 function escapeXml(value: string) {
   return value
@@ -31,22 +23,30 @@ export default defineEventHandler(async (event) => {
       supabase.from('mix_recipes').select('id,title').eq('status', 'published').order('id')
     ])
 
+    for (const [label, result] of [
+      ['flavors', flavorsResult],
+      ['brands', brandsResult],
+      ['mixes', mixesResult]
+    ] as const) {
+      if (result.error) console.error(`sitemap ${label} query failed:`, result.error.message)
+    }
+
     for (const flavor of flavorsResult.data || []) {
-      urls.add(`${siteUrl}/flavors/${slugify(flavor.name)}-${flavor.id}`)
-      if (flavor.category) urls.add(`${siteUrl}/categories/${slugify(flavor.category)}`)
+      urls.add(siteUrl + flavorPath(flavor.name, flavor.id))
+      if (flavor.category) urls.add(siteUrl + categoryPath(flavor.category))
     }
     for (const brand of brandsResult.data || []) {
-      urls.add(`${siteUrl}/brands/${slugify(brand.name)}-${brand.id}`)
+      urls.add(siteUrl + brandPath(brand.name, brand.id))
     }
     for (const mix of mixesResult.data || []) {
-      urls.add(`${siteUrl}/mixes/${slugify(mix.title)}-${mix.id}`)
+      urls.add(siteUrl + mixPath(mix.title, mix.id))
     }
   } catch (error) {
     console.error('sitemap generation fallback:', error)
   }
 
   const body = [...urls]
-    .map((url) => `  <url><loc>${escapeXml(url)}</loc></url>`)
+    .map((url) => `  <url><loc>${escapeXml(encodeURI(url))}</loc></url>`)
     .join('\n')
 
   setHeader(event, 'content-type', 'application/xml; charset=utf-8')
